@@ -1,5 +1,6 @@
 """Dukascopyから探索用OHLCを取得して data/ohlc/{SYMBOL}_{TF}.parquet に置く。
 
+- H4/M30は取得せずH1/M15からリサンプルで作る
 - 既存ファイルがあれば末尾から差分だけ取得する(resume / 再取得を避ける)
 - 直列・ランダムsleep・全fetchをログ出力
 - 連続失敗したら即停止する(強行しない)。取れた分だけで探索は続行できる
@@ -47,15 +48,16 @@ def fetch_one(symbol: str, tf: str, today: date) -> str:
     return f"{start}..{today} +{len(new)}行 計{len(df)}行"
 
 
-def build_h4(symbol: str) -> None:
-    src = OHLC_DIR / f"{symbol}_H1.parquet"
+def build_derived(symbol: str, tf: str) -> None:
+    src_tf, rule = config.DERIVED_TFS[tf]
+    src = OHLC_DIR / f"{symbol}_{src_tf}.parquet"
     if not src.exists():
         return
-    h1 = pd.read_parquet(src).set_index("timestamp")
-    h4 = h1.resample("4h").agg(
+    base = pd.read_parquet(src).set_index("timestamp")
+    out = base.resample(rule).agg(
         {"open": "first", "high": "max", "low": "min", "close": "last", "volume": "sum"}
     ).dropna(subset=["open"]).reset_index()
-    h4.to_parquet(OHLC_DIR / f"{symbol}_H4.parquet", index=False)
+    out.to_parquet(OHLC_DIR / f"{symbol}_{tf}.parquet", index=False)
 
 
 def main() -> int:
@@ -80,7 +82,8 @@ def main() -> int:
         break
 
     for symbol in config.PAIRS:
-        build_h4(symbol)
+        for tf in config.DERIVED_TFS:
+            build_derived(symbol, tf)
 
     files = sorted(p.name for p in OHLC_DIR.glob("*.parquet"))
     log(f"利用可能: {len(files)}ファイル")

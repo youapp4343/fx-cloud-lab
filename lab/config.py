@@ -7,12 +7,15 @@ PAIRS = [
     "NZDUSD", "EURJPY", "GBPJPY", "AUDJPY", "EURGBP", "XAUUSD",
 ]
 
-# 取得する足(H4はH1からリサンプル)と取得開始日
+# 取得する足と取得開始日
 FETCH_TFS = ["H1", "M15"]
 FETCH_START = "2016-01-01"
 
+# 取得せずリサンプルで作る足: 生成先 -> (元の足, pandasのルール)
+DERIVED_TFS = {"H4": ("H1", "4h"), "M30": ("M15", "30min")}
+
 # 探索時の時間足と抽選の重み(M15は1本あたり重いので低め)
-TF_WEIGHTS = {"H4": 0.3, "H1": 0.5, "M15": 0.2}
+TF_WEIGHTS = {"H4": 0.25, "H1": 0.4, "M30": 0.2, "M15": 0.15}
 
 # 取引時間帯フィルタ(UTC)
 WINDOWS = {

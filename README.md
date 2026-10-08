@@ -14,7 +14,7 @@ FX戦略のランダム探索を GitHub Actions 上で回し、結果を GitHub 
 
 - `app/core/` — バックテストエンジンと戦略テンプレート(FXプロジェクトのコピー)
 - `lab/config.py` — ユニバース・コスト・判定ゲート(事前固定)
-- `lab/fetch.py` — Dukascopy から H1/M15 を差分取得、H4 は H1 から生成
+- `lab/fetch.py` — Dukascopy から H1/M15 を差分取得、H4・M30 はリサンプルで生成
 - `lab/search.py` — 時間予算つきランダム探索(train → confirm → holdout の段階ゲート)
 - `lab/report.py` — 累積統合、BH-FDR、HTML生成
 
