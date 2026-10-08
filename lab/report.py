@@ -50,6 +50,9 @@ def judge(r: Dict[str, Any]) -> List[str]:
         fails.append("CI下限≤0")
     if r.get("ho_sum_ex_top3", -1.0) <= 0:
         fails.append("上位3除外で負")
+    # 未計測(構造的SL/TPのテンプレート・旧記録)は判定対象外。表では「-」と出る
+    if r.get("ho_placebo_p", 0.0) > config.PLACEBO_MAX_P:
+        fails.append("プラセボ並み")
     return fails
 
 
@@ -59,6 +62,7 @@ def fmt_params(p: Dict[str, float]) -> str:
 
 def row_html(r: Dict[str, Any]) -> str:
     fails = r["fails"]
+    placebo = f"{r['ho_placebo_p']:.2f}" if "ho_placebo_p" in r else "-"
     badge = '<span class="ok">生存</span>' if not fails else f'<span class="ng">{html.escape(" / ".join(fails))}</span>'
     return (
         "<tr>"
@@ -69,10 +73,11 @@ def row_html(r: Dict[str, Any]) -> str:
         f"<td>{r.get('ho_mean', 0):.2f}<br><small>[{r.get('ho_ci_lo', 0):.2f}, {r.get('ho_ci_hi', 0):.2f}]</small></td>"
         f"<td>{r.get('ho_p_pos', 0):.3f}</td>"
         f"<td>{r.get('q', 1):.3f}</td>"
+        f"<td>{placebo}</td>"
         f"<td>{r.get('ho_sum', 0):.0f}<br><small>除外後 {r.get('ho_sum_ex_top3', 0):.0f}</small></td>"
         f"<td>{r.get('ho_maxdd', 0):.0f}</td>"
         f"<td>{r['tr_pf']:.2f} / {r['cf_pf']:.2f}<br><small>n {r['tr_n']} / {r['cf_n']}</small></td>"
-        f"<td><small>{html.escape(fmt_params(r['params']))}</small></td>"
+        f"<td><small>{html.escape(r.get('desc') or fmt_params(r['params']))}</small></td>"
         "</tr>"
     )
 
@@ -91,7 +96,7 @@ th{color:var(--mut);font-weight:600}small{color:var(--mut)}.ok{color:var(--ok);f
 """
 
 HEAD = ("<tr><th>戦略</th><th>判定</th><th>n</th><th>PF</th><th>平均pips [CI95]</th><th>P(&gt;0)</th>"
-        "<th>q値</th><th>合計pips</th><th>最大DD</th><th>PF train / confirm</th><th>パラメータ</th></tr>")
+        "<th>q値</th><th>プラセボp</th><th>合計pips</th><th>最大DD</th><th>PF train / confirm</th><th>パラメータ</th></tr>")
 
 
 def build_html(stats: Dict[str, Any], evaluated: List[Dict[str, Any]]) -> str:
@@ -121,7 +126,9 @@ def build_html(stats: Dict[str, Any], evaluated: List[Dict[str, Any]]) -> str:
 <h2>判定基準</h2><ul>
 <li>時系列分割: train 60% → confirm 20% → holdout 20%(古い順)。holdoutはtrain・confirmを両方通過した試行だけが見る</li>
 <li>通過条件: train n≥{config.TRAIN_MIN_N} かつ PF≥{config.TRAIN_MIN_PF} / confirm n≥{config.CONFIRM_MIN_N} かつ PF≥{config.CONFIRM_MIN_PF}</li>
-<li>生存条件(holdout): n≥{config.HOLDOUT_MIN_N}、片側t検定のBH-FDR q≤{config.FDR_Q}、平均pipsのbootstrap CI95下限&gt;0、上位3トレード除外後も合計pips&gt;0</li>
+<li>生存条件(holdout): n≥{config.HOLDOUT_MIN_N}、片側t検定のBH-FDR q≤{config.FDR_Q}、平均pipsのbootstrap CI95下限&gt;0、上位3トレード除外後も合計pips&gt;0、プラセボp≤{config.PLACEBO_MAX_P}</li>
+<li>プラセボp: シグナルを日単位でずらした{config.PLACEBO_N}本の偽ルールと合計pipsを比較した順位。高いほど「相場の地合いに乗っただけ」</li>
+<li>戦略名 gen は特徴量条件を自動合成したルール(しきい値はtrain区間の分位点で固定)。それ以外は既存テンプレートのパラメータ摂動</li>
 <li>コストは仮定値(ペア別スプレッド+スリッページ{config.SLIPPAGE_PIPS}pips)。スワップ・約定拒否・スプレッド拡大は未反映</li>
 <li>表示値はすべてholdoutの値。ここの「生存」は実運用可を意味しない。次段はブローカー実ティックでの再検証とデモ運用</li>
 </ul><h2>直近の実行</h2><ul>{runs}</ul></body></html>"""

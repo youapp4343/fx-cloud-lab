@@ -35,7 +35,10 @@ SPREAD_PIPS = {
 SLIPPAGE_PIPS = 0.2
 
 # index/曜日指定など個別入力が要る特殊テンプレートは対象外(grand_sweepと同じ)
-EXCLUDE_TEMPLATES = {"feature_rule", "candle_pattern", "seasonal"}
+EXCLUDE_TEMPLATES = {"feature_rule", "candle_pattern", "seasonal", "lab_replay"}
+
+# 試行のうちルール自動生成(lab.gen)に回す割合。残りは既存テンプレートの摂動
+GEN_SHARE = 0.6
 
 # 時系列分割(古い順): train 60% / confirm 20% / holdout 20%
 SPLIT = (0.6, 0.8)
@@ -48,6 +51,9 @@ CONFIRM_MIN_N, CONFIRM_MIN_PF = 30, 1.10
 HOLDOUT_MIN_N = 30
 FDR_Q = 0.10
 BOOTSTRAP_N = 2000
+# プラセボ(シグナルの日単位巡回シフト)の本数と許容p値。p最小値は 1/(N+1)
+PLACEBO_N = 20
+PLACEBO_MAX_P = 0.10
 
 # パラメータ摂動の倍率候補(1.0を厚めに)
 PARAM_FACTORS = [0.5, 0.67, 0.8, 1.0, 1.0, 1.25, 1.5, 2.0]
