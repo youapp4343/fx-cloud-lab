@@ -1,14 +1,19 @@
 {
- "trials": 2389,
- "errors": 36,
- "passed_train": 112,
- "passed_confirm": 26,
+ "trials": 4231,
+ "errors": 50,
+ "passed_train": 166,
+ "passed_confirm": 42,
  "runs": [
   {
    "at": "2026-10-08 06:11",
    "trials": 2425,
    "holdout": 26
+  },
+  {
+   "at": "2026-10-08 08:24",
+   "trials": 1856,
+   "holdout": 16
   }
  ],
- "updated": "2026-10-08 06:11"
+ "updated": "2026-10-08 08:24"
 }
