@@ -1,0 +1,9 @@
+pandas
+numpy
+pyarrow
+pydantic
+scipy
+scikit-learn
+statsmodels
+jinja2
+dukascopy-python

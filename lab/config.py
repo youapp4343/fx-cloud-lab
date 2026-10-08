@@ -1,0 +1,50 @@
+"""探索ユニバースと判定ゲートの設定(事前固定。結果を見てから緩めない)。"""
+
+from __future__ import annotations
+
+PAIRS = [
+    "EURUSD", "USDJPY", "GBPUSD", "AUDUSD", "USDCHF", "USDCAD",
+    "NZDUSD", "EURJPY", "GBPJPY", "AUDJPY", "EURGBP", "XAUUSD",
+]
+
+# 取得する足(H4はH1からリサンプル)と取得開始日
+FETCH_TFS = ["H1", "M15"]
+FETCH_START = "2016-01-01"
+
+# 探索時の時間足と抽選の重み(M15は1本あたり重いので低め)
+TF_WEIGHTS = {"H4": 0.3, "H1": 0.5, "M15": 0.2}
+
+# 取引時間帯フィルタ(UTC)
+WINDOWS = {
+    "all": None,
+    "asia0_8": [0, 8],
+    "eu8_16": [8, 16],
+    "ny13_21": [13, 21],
+    "night20_0": [20, 0],
+}
+
+# 想定コスト(pips)。ブローカー実測ではなく保守的な仮定値。XAUUSDは1pip=0.1ドル。
+SPREAD_PIPS = {
+    "EURUSD": 0.6, "USDJPY": 0.7, "GBPUSD": 1.0, "AUDUSD": 0.8, "USDCHF": 1.0,
+    "USDCAD": 1.0, "NZDUSD": 1.2, "EURJPY": 1.2, "GBPJPY": 1.8, "AUDJPY": 1.3,
+    "EURGBP": 1.0, "XAUUSD": 2.5,
+}
+SLIPPAGE_PIPS = 0.2
+
+# index/曜日指定など個別入力が要る特殊テンプレートは対象外(grand_sweepと同じ)
+EXCLUDE_TEMPLATES = {"feature_rule", "candle_pattern", "seasonal"}
+
+# 時系列分割(古い順): train 60% / confirm 20% / holdout 20%
+SPLIT = (0.6, 0.8)
+
+# 段階ゲート。holdoutはtrain・confirmを両方通過した試行だけが見る。
+TRAIN_MIN_N, TRAIN_MIN_PF = 100, 1.10
+CONFIRM_MIN_N, CONFIRM_MIN_PF = 30, 1.10
+
+# 生存判定(holdout)
+HOLDOUT_MIN_N = 30
+FDR_Q = 0.10
+BOOTSTRAP_N = 2000
+
+# パラメータ摂動の倍率候補(1.0を厚めに)
+PARAM_FACTORS = [0.5, 0.67, 0.8, 1.0, 1.0, 1.25, 1.5, 2.0]
