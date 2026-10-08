@@ -1,0 +1,103 @@
+name: search
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "1シャードあたりの探索時間(分)"
+        default: "20"
+  schedule:
+    - cron: "17 18 * * *" # 毎日 03:17 JST
+
+permissions:
+  contents: write
+
+concurrency:
+  group: search
+  cancel-in-progress: false
+
+env:
+  MINUTES: ${{ github.event.inputs.minutes || '20' }}
+
+jobs:
+  data:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      # 前回までのOHLCを復元し、fetch.pyは末尾の差分だけ取得する
+      - uses: actions/cache@v4
+        with:
+          path: data/ohlc
+          key: ohlc-v1-${{ github.run_id }}
+          restore-keys: ohlc-v1-
+      - run: python -m lab.fetch
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ohlc
+          path: data/ohlc
+          retention-days: 1
+
+  search:
+    needs: data
+    runs-on: ubuntu-latest
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5, 6, 7]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: ohlc
+          path: data/ohlc
+      - run: >
+          python -m lab.search --shard ${{ matrix.shard }} --minutes "$MINUTES"
+          --seed ${{ github.run_id }} --out out/shard_${{ matrix.shard }}.jsonl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: results-${{ matrix.shard }}
+          path: out
+          retention-days: 7
+
+  report:
+    needs: search
+    if: ${{ !cancelled() }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: results-*
+          path: out
+          merge-multiple: true
+      - name: Restore site (gh-pages)
+        env:
+          REMOTE: https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git
+        run: |
+          git clone --depth 1 --branch gh-pages "$REMOTE" site || {
+            mkdir site && git -C site init -b gh-pages && git -C site remote add origin "$REMOTE"
+          }
+      - run: python -m lab.report --in out --site site
+      - name: Publish
+        run: |
+          cd site
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git commit -m "report: run ${{ github.run_id }}" || exit 0
+          git push origin gh-pages
