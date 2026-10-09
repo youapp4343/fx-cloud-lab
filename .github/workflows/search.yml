@@ -37,10 +37,20 @@ jobs:
           key: ohlc-v1-${{ github.run_id }}
           restore-keys: ohlc-v1-
       - run: python -m lab.fetch
+      # 価格以外の公開データ(CFTC COT・FRED金利)。過去年のCOT zipはキャッシュし当年分だけ取り直す
+      - uses: actions/cache@v4
+        with:
+          path: data/macro
+          key: macro-v1-${{ github.run_id }}
+          restore-keys: macro-v1-
+      - run: python -m lab.fetch_macro
       - uses: actions/upload-artifact@v4
         with:
           name: ohlc
-          path: data/ohlc
+          path: |
+            data/ohlc
+            data/macro
+            !data/macro/raw
           retention-days: 1
 
   search:
@@ -61,7 +71,7 @@ jobs:
       - uses: actions/download-artifact@v4
         with:
           name: ohlc
-          path: data/ohlc
+          path: data
       - run: >
           python -m lab.search --shard ${{ matrix.shard }} --minutes "$MINUTES"
           --seed ${{ github.run_id }} --out out/shard_${{ matrix.shard }}.jsonl

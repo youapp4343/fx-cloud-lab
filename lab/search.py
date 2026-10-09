@@ -205,6 +205,8 @@ def main() -> None:
     tfs, weights = list(config.TF_WEIGHTS), list(config.TF_WEIGHTS.values())
     broken: set = set()  # (tpl, tf) で例外が出た組は同一シャード内で再試行しない
     n_done = 0
+    macro = gen.load_macro()
+    print(f"[shard {args.shard}] macro: {sorted(macro)}", flush=True)
 
     args.out.parent.mkdir(parents=True, exist_ok=True)
     if not any(datafeed.OHLC_DIR.glob("*.parquet")):
@@ -218,7 +220,8 @@ def main() -> None:
             a, b = int(len(df) * config.SPLIT[0]), int(len(df) * config.SPLIT[1])
             parts = [df.iloc[:a].reset_index(drop=True), df.iloc[a:b].reset_index(drop=True),
                      df.iloc[b:].reset_index(drop=True)]
-            block = gen.Block(df, (a, b), engine._pip_size(pair), gen.load_refs(pair, tf, config.PAIRS, rng))
+            block = gen.Block(df, (a, b), engine._pip_size(pair), gen.load_refs(pair, tf, config.PAIRS, rng),
+                              pair, macro, tf)
             del df
             for _ in range(BLOCK_TRIALS):
                 if time.time() >= deadline or (args.max_trials and n_done >= args.max_trials):

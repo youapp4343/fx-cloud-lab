@@ -15,6 +15,9 @@ FX戦略のランダム探索を GitHub Actions 上で回し、結果を GitHub 
 - `app/core/` — バックテストエンジンと戦略テンプレート(FXプロジェクトのコピー)
 - `lab/config.py` — ユニバース・コスト・判定ゲート(事前固定)
 - `lab/fetch.py` — Dukascopy から H1/M15 を差分取得、H4・M30 はリサンプルで生成
+- `lab/fetch_macro.py` — CFTC COT建玉・FRED金利を取得。公表時刻(available_at)つきで保存
+- `lab/gen.py` — ルール自動生成。特徴量は値動き・他銘柄・日〜月単位のモメンタム・暦・通貨強弱・COT・金利
+- `lab/gh_scout.py` — GitHubのFX戦略リポジトリを「検証の質」で採点(結果は `scout/REPORT.md`)
 - `lab/search.py` — 時間予算つきランダム探索(train → confirm → holdout の段階ゲート)
 - `lab/report.py` — 累積統合、BH-FDR、HTML生成
 
