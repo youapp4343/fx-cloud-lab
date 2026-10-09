@@ -1,29 +1,24 @@
 {
- "trials": 13067,
- "errors": 101,
- "passed_train": 440,
- "passed_confirm": 131,
+ "trials": 3672,
+ "errors": 19,
+ "passed_train": 237,
+ "passed_confirm": 156,
  "runs": [
   {
-   "at": "2026-10-08 06:11",
-   "trials": 2425,
-   "holdout": 26
-  },
-  {
-   "at": "2026-10-08 08:24",
-   "trials": 1856,
-   "holdout": 16
-  },
-  {
-   "at": "2026-10-08 23:46",
-   "trials": 4801,
-   "holdout": 60
-  },
-  {
-   "at": "2026-10-09 04:20",
-   "trials": 4086,
-   "holdout": 29
+   "at": "2026-10-09 18:46",
+   "trials": 3691,
+   "holdout": 156
   }
  ],
- "updated": "2026-10-09 04:20"
+ "cost_model": "tt_hourly_v1",
+ "legacy": [
+  {
+   "cost_model": null,
+   "trials": 13067,
+   "passed_train": 440,
+   "passed_confirm": 131,
+   "updated": "2026-10-09 04:20"
+  }
+ ],
+ "updated": "2026-10-09 18:46"
 }
