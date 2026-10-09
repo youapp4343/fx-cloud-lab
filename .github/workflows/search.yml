@@ -6,6 +6,9 @@ on:
       minutes:
         description: "1シャードあたりの探索時間(分)"
         default: "20"
+      recheck:
+        description: "過去のholdout到達分を現行コストで再判定する(true/false)"
+        default: "false"
   schedule:
     - cron: "17 18 * * *" # 毎日 03:17 JST
 
@@ -81,8 +84,32 @@ jobs:
           path: out
           retention-days: 7
 
+  recheck:
+    needs: data
+    if: ${{ github.event.inputs.recheck == 'true' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: ohlc
+          path: data
+      - run: curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/gh-pages/results.jsonl" -o prev_results.jsonl
+      - run: python -m lab.recheck --results prev_results.jsonl --out out/recheck.jsonl
+      - uses: actions/upload-artifact@v4
+        with:
+          name: results-recheck
+          path: out
+          retention-days: 7
+
   report:
-    needs: search
+    needs: [search, recheck]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:

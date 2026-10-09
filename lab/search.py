@@ -5,7 +5,8 @@
 - gen     : lab.gen によるルール自動生成(特徴量条件のAND結合)
 
 どちらも train → confirm → holdout の段階ゲートで評価してJSONLに追記する。
-holdoutを見るのは train・confirm を両方通過した試行だけ。holdoutでは、シグナルを
+holdoutを見るのは train・confirm を両方通過した試行だけ。
+損益はすべて lab.costs の時間帯別実測コストを反映した値で判定する。holdoutでは、シグナルを
 日単位で巡回シフトしたプラセボと比較し、相場の地合いに乗っただけのルールを落とす。
 
 メモリ節約: 同時に保持するのは1銘柄×1時間足のOHLCと特徴量のみ。
@@ -31,7 +32,7 @@ from scipy import stats
 import app.core  # noqa: F401 - テンプレート登録の副作用import
 from app.core import datafeed, engine, templates
 from app.core.strategy_model import Strategy, StrategyFilters, StrategyParam
-from lab import config, gen
+from lab import config, costs, gen
 
 BLOCK_TRIALS = 40  # 1銘柄×1時間足を読み込んだら何試行まとめて回すか
 
@@ -54,8 +55,9 @@ def trial_key(*parts: Any) -> str:
     return hashlib.sha1(json.dumps(parts, sort_keys=True).encode()).hexdigest()[:16]
 
 
-def pips_of(result: Dict[str, Any]) -> np.ndarray:
-    return np.array([float(t["pips"]) for t in result["trades"]], dtype=np.float64)
+def pips_of(result: Dict[str, Any], pair: str) -> np.ndarray:
+    """時間帯別の実測コスト(lab.costs)を反映したトレード損益。"""
+    return costs.adjust(result["trades"], pair)
 
 
 def pf_of(pips: np.ndarray) -> float:
@@ -112,7 +114,7 @@ def placebo_p(sig: np.ndarray, replay: Strategy, df: pd.DataFrame, cost: Dict[st
     ge = 0
     for _ in range(config.PLACEBO_N):
         gen.set_replay(np.roll(sig, int(rng.integers(5, n_days - 5)) * bpd))
-        if pips_of(engine.run_backtest(replay, df, **cost)).sum() >= actual_sum:
+        if pips_of(engine.run_backtest(replay, df, **cost), replay.symbol).sum() >= actual_sum:
             ge += 1
     return round((1 + ge) / (config.PLACEBO_N + 1), 4)
 
@@ -147,9 +149,14 @@ def staged(rec: Dict[str, Any], bt: Callable[[int], np.ndarray],
 
 def run_template_trial(tpl: str, pair: str, tf: str, win: str, parts: List[pd.DataFrame],
                        rng: random.Random) -> Dict[str, Any]:
-    params = sample_params(tpl, rng)
+    return eval_template(tpl, pair, tf, win, sample_params(tpl, rng), parts, rng.randrange(2**31))
+
+
+def eval_template(tpl: str, pair: str, tf: str, win: str, params: Dict[str, float],
+                  parts: List[pd.DataFrame], seed: int) -> Dict[str, Any]:
     rec: Dict[str, Any] = {"key": trial_key(tpl, pair, tf, win, params), "kind": "template",
-                           "tpl": tpl, "pair": pair, "tf": tf, "win": win, "params": params}
+                           "tpl": tpl, "pair": pair, "tf": tf, "win": win, "params": params,
+                           "cost": costs.MODEL}
     s = make_strategy(tpl, pair, tf, win, params)
     cost = dict(spread_pips=config.SPREAD_PIPS[pair], slippage_pips=config.SLIPPAGE_PIPS)
 
@@ -158,17 +165,21 @@ def run_template_trial(tpl: str, pair: str, tf: str, win: str, parts: List[pd.Da
         # 構造的SL/TP(価格列つきDataFrame)はシフトすると価格が無意味になるため対象外
         return sig.fillna(0).to_numpy(dtype=np.int64) if isinstance(sig, pd.Series) else None
 
-    return staged(rec, lambda i: pips_of(engine.run_backtest(s, parts[i], **cost)),
+    return staged(rec, lambda i: pips_of(engine.run_backtest(s, parts[i], **cost), pair),
                   holdout_signal, make_strategy("lab_replay", pair, tf, win, params),
-                  parts, cost, rng.randrange(2**31))
+                  parts, cost, seed)
 
 
 def run_gen_trial(pair: str, tf: str, win: str, parts: List[pd.DataFrame],
                   block: gen.Block, rng: random.Random) -> Dict[str, Any]:
-    rule = block.sample_rule(rng)
+    return eval_gen(block.sample_rule(rng), pair, tf, win, parts, block, rng.randrange(2**31))
+
+
+def eval_gen(rule: Dict[str, Any], pair: str, tf: str, win: str, parts: List[pd.DataFrame],
+             block: gen.Block, seed: int) -> Dict[str, Any]:
     rec: Dict[str, Any] = {"key": trial_key("gen", pair, tf, win, rule), "kind": "gen",
                            "tpl": "gen", "pair": pair, "tf": tf, "win": win,
-                           "rule": rule, "desc": gen.describe(rule)}
+                           "rule": rule, "desc": gen.describe(rule), "cost": costs.MODEL}
     s = make_strategy("lab_replay", pair, tf, win, gen.rule_params(rule))
     cost = dict(spread_pips=config.SPREAD_PIPS[pair], slippage_pips=config.SLIPPAGE_PIPS)
 
@@ -177,9 +188,9 @@ def run_gen_trial(pair: str, tf: str, win: str, parts: List[pd.DataFrame],
         if sig is None or not sig.any():
             return np.array([], dtype=np.float64)
         gen.set_replay(sig)
-        return pips_of(engine.run_backtest(s, parts[i], **cost))
+        return pips_of(engine.run_backtest(s, parts[i], **cost), pair)
 
-    return staged(rec, bt, lambda: block.signal(rule, 2), s, parts, cost, rng.randrange(2**31))
+    return staged(rec, bt, lambda: block.signal(rule, 2), s, parts, cost, seed)
 
 
 def load_df(pair: str, tf: str) -> Optional[pd.DataFrame]:

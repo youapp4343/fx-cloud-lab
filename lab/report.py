@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
-from lab import config
+from lab import config, costs
 
 
 def load_jsonl(path: Path) -> List[Dict[str, Any]]:
@@ -63,6 +63,7 @@ def fmt_params(p: Dict[str, float]) -> str:
 def row_html(r: Dict[str, Any]) -> str:
     fails = r["fails"]
     placebo = f"{r['ho_placebo_p']:.2f}" if "ho_placebo_p" in r else "-"
+    old = f"<br>旧コスト(固定スプレッド)でのPF {r['old_ho_pf']:.2f}" if r.get("old_ho_pf") is not None else ""
     badge = '<span class="ok">生存</span>' if not fails else f'<span class="ng">{html.escape(" / ".join(fails))}</span>'
     return (
         "<tr>"
@@ -77,7 +78,7 @@ def row_html(r: Dict[str, Any]) -> str:
         f"<td>{r.get('ho_sum', 0):.0f}<br><small>除外後 {r.get('ho_sum_ex_top3', 0):.0f}</small></td>"
         f"<td>{r.get('ho_maxdd', 0):.0f}</td>"
         f"<td>{r['tr_pf']:.2f} / {r['cf_pf']:.2f}<br><small>n {r['tr_n']} / {r['cf_n']}</small></td>"
-        f"<td><small>{html.escape(r.get('desc') or fmt_params(r['params']))}</small></td>"
+        f"<td><small>{html.escape(r.get('desc') or fmt_params(r['params']))}{old}</small></td>"
         "</tr>"
     )
 
@@ -129,7 +130,9 @@ def build_html(stats: Dict[str, Any], evaluated: List[Dict[str, Any]]) -> str:
 <li>生存条件(holdout): n≥{config.HOLDOUT_MIN_N}、片側t検定のBH-FDR q≤{config.FDR_Q}、平均pipsのbootstrap CI95下限&gt;0、上位3トレード除外後も合計pips&gt;0、プラセボp≤{config.PLACEBO_MAX_P}</li>
 <li>プラセボp: シグナルを日単位でずらした{config.PLACEBO_N}本の偽ルールと合計pipsを比較した順位。高いほど「相場の地合いに乗っただけ」</li>
 <li>戦略名 gen は特徴量条件を自動合成したルール(しきい値はtrain区間の分位点で固定)。それ以外は既存テンプレートのパラメータ摂動</li>
-<li>コストは仮定値(ペア別スプレッド+スリッページ{config.SLIPPAGE_PIPS}pips)。スワップ・約定拒否・スプレッド拡大は未反映</li>
+<li>コスト: ThreeTraderの実測スプレッド(UTC時間帯別の平均)+手数料{costs.COMMISSION_PIPS}pips+スリッページ{config.SLIPPAGE_PIPS}pips。
+実測が無い銘柄(USDCHF・USDCAD・NZDUSD・EURGBP)は実測銘柄の時間帯別の拡大幅を足して推定。スワップ・約定拒否は未反映</li>
+<li>売りポジションのSLがスプレッド拡大だけで刈られる効果は未反映(ロールオーバーをまたぐ売りは実際より良く見える)</li>
 <li>表示値はすべてholdoutの値。ここの「生存」は実運用可を意味しない。次段はブローカー実ティックでの再検証とデモ運用</li>
 </ul><h2>直近の実行</h2><ul>{runs}</ul></body></html>"""
 
@@ -143,26 +146,38 @@ def main() -> None:
 
     new = [r for p in sorted(args.in_dir.rglob("*.jsonl")) for r in load_jsonl(p)]
     stats_path = args.site / "stats.json"
-    stats = json.loads(stats_path.read_text(encoding="utf-8")) if stats_path.exists() else {
-        "trials": 0, "errors": 0, "passed_train": 0, "passed_confirm": 0, "runs": []}
+    empty = {"trials": 0, "errors": 0, "passed_train": 0, "passed_confirm": 0, "runs": []}
+    stats = json.loads(stats_path.read_text(encoding="utf-8")) if stats_path.exists() else dict(empty)
+    if stats.get("cost_model") != costs.MODEL:
+        # コストモデルが変わったら数え直す。旧モデルの集計は参考として残す(判定には使わない)
+        legacy = {k: stats.get(k) for k in ("cost_model", "trials", "passed_train", "passed_confirm", "updated")}
+        stats = {**empty, "runs": [], "cost_model": costs.MODEL,
+                 "legacy": stats.get("legacy", []) + ([legacy] if stats.get("trials") else [])}
 
     results = {r["key"]: r for r in load_jsonl(args.site / "results.jsonl")}
-    fresh = [r for r in new if r.get("stage", 0) >= 1 and r["key"] not in results]
+    # 現行コストモデルの記録は、同じkeyの旧モデル記録を置き換える(再判定の結果を反映)
+    is_cur = lambda r: r.get("cost") == costs.MODEL  # noqa: E731
+    fresh = [r for r in new if "key" in r and is_cur(r)
+             and (r["key"] not in results or not is_cur(results[r["key"]]))]
     for r in fresh:
-        results[r["key"]] = r
+        if r.get("stage", 0) >= 1:
+            results[r["key"]] = r
+        else:
+            results.pop(r["key"], None)   # 新コストではtrainを通らなかった
+    current = [r for r in results.values() if is_cur(r)]
 
     now = time.strftime("%Y-%m-%d %H:%M", time.gmtime())
     stats["trials"] += sum(1 for r in new if r.get("stage", 0) >= 0)
     stats["errors"] += sum(1 for r in new if r.get("stage") == -1)
-    stats["passed_train"] = len(results)
-    stats["passed_confirm"] = sum(1 for r in results.values() if r["stage"] >= 2)
+    stats["passed_train"] = len(current)
+    stats["passed_confirm"] = sum(1 for r in current if r["stage"] >= 2)
     stats["updated"] = now
     if new:
         stats["runs"].append({"at": now, "trials": len(new),
-                              "holdout": sum(1 for r in fresh if r["stage"] >= 2)})
+                              "holdout": sum(1 for r in fresh if r.get("stage", 0) >= 2)})
         stats["runs"] = stats["runs"][-200:]
 
-    evaluated = [dict(r) for r in results.values() if r["stage"] >= 2 and "ho_p" in r]
+    evaluated = [dict(r) for r in current if r["stage"] >= 2 and "ho_p" in r]
     for r, q in zip(evaluated, bh_qvalues([r["ho_p"] for r in evaluated])):
         r["q"] = q
         r["fails"] = judge(r)
