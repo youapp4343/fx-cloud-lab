@@ -20,8 +20,8 @@ import numpy as np
 
 from lab import config
 
-MODEL = "tt_hourly_v1"
-COMMISSION_PIPS = 0.4   # ThreeTrader Raw: 往復 $4/lot 相当 ≒ 0.4pips(XAUUSDは1pip=0.1ドルで同じ0.4)
+MODEL = config.COST_MODEL
+COMMISSION_PIPS = config.COMMISSION_PIPS
 PROFILE_PATH = Path(__file__).resolve().parent / "spread_profile.json"
 
 _profile: Dict[str, Any] = json.loads(PROFILE_PATH.read_text(encoding="utf-8")) if PROFILE_PATH.exists() else {}

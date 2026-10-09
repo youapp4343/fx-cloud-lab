@@ -34,6 +34,11 @@ SPREAD_PIPS = {
 }
 SLIPPAGE_PIPS = 0.2
 
+# コストモデルの識別子。lab/costs.py が SPREAD_PIPS の上に時間帯別の実測コストを重ねる。
+# 変えたら過去の結果とは比較できないので、report は数え直し、recheck で再判定する
+COST_MODEL = "tt_hourly_v1"
+COMMISSION_PIPS = 0.4   # ThreeTrader Raw: 往復 $4/lot 相当 ≒ 0.4pips(XAUUSDは1pip=0.1ドルで同じ0.4)
+
 # index/曜日指定など個別入力が要る特殊テンプレートは対象外(grand_sweepと同じ)
 EXCLUDE_TEMPLATES = {"feature_rule", "candle_pattern", "seasonal", "lab_replay"}
 

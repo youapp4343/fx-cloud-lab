@@ -28,7 +28,7 @@ BIN = 0.05          # ヒストグラムの刻み(pips)
 MAX_PIPS = 60.0     # これ以上は最後のビンに寄せる
 N_BINS = int(MAX_PIPS / BIN) + 1
 MIN_TICKS = 50      # 1時間帯あたりの最低観測数
-COMMISSION_PIPS = 0.4
+COMMISSION_PIPS = config.COMMISSION_PIPS
 
 
 def pip_of(pair: str) -> float:

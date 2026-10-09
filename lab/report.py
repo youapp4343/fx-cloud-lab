@@ -17,7 +17,7 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List
 
-from lab import config, costs
+from lab import config
 
 
 def load_jsonl(path: Path) -> List[Dict[str, Any]]:
@@ -130,7 +130,7 @@ def build_html(stats: Dict[str, Any], evaluated: List[Dict[str, Any]]) -> str:
 <li>生存条件(holdout): n≥{config.HOLDOUT_MIN_N}、片側t検定のBH-FDR q≤{config.FDR_Q}、平均pipsのbootstrap CI95下限&gt;0、上位3トレード除外後も合計pips&gt;0、プラセボp≤{config.PLACEBO_MAX_P}</li>
 <li>プラセボp: シグナルを日単位でずらした{config.PLACEBO_N}本の偽ルールと合計pipsを比較した順位。高いほど「相場の地合いに乗っただけ」</li>
 <li>戦略名 gen は特徴量条件を自動合成したルール(しきい値はtrain区間の分位点で固定)。それ以外は既存テンプレートのパラメータ摂動</li>
-<li>コスト: ThreeTraderの実測スプレッド(UTC時間帯別の平均)+手数料{costs.COMMISSION_PIPS}pips+スリッページ{config.SLIPPAGE_PIPS}pips。
+<li>コスト: ThreeTraderの実測スプレッド(UTC時間帯別の平均)+手数料{config.COMMISSION_PIPS}pips+スリッページ{config.SLIPPAGE_PIPS}pips。
 実測が無い銘柄(USDCHF・USDCAD・NZDUSD・EURGBP)は実測銘柄の時間帯別の拡大幅を足して推定。スワップ・約定拒否は未反映</li>
 <li>売りポジションのSLがスプレッド拡大だけで刈られる効果は未反映(ロールオーバーをまたぐ売りは実際より良く見える)</li>
 <li>表示値はすべてholdoutの値。ここの「生存」は実運用可を意味しない。次段はブローカー実ティックでの再検証とデモ運用</li>
@@ -148,15 +148,15 @@ def main() -> None:
     stats_path = args.site / "stats.json"
     empty = {"trials": 0, "errors": 0, "passed_train": 0, "passed_confirm": 0, "runs": []}
     stats = json.loads(stats_path.read_text(encoding="utf-8")) if stats_path.exists() else dict(empty)
-    if stats.get("cost_model") != costs.MODEL:
+    if stats.get("cost_model") != config.COST_MODEL:
         # コストモデルが変わったら数え直す。旧モデルの集計は参考として残す(判定には使わない)
         legacy = {k: stats.get(k) for k in ("cost_model", "trials", "passed_train", "passed_confirm", "updated")}
-        stats = {**empty, "runs": [], "cost_model": costs.MODEL,
+        stats = {**empty, "runs": [], "cost_model": config.COST_MODEL,
                  "legacy": stats.get("legacy", []) + ([legacy] if stats.get("trials") else [])}
 
     results = {r["key"]: r for r in load_jsonl(args.site / "results.jsonl")}
     # 現行コストモデルの記録は、同じkeyの旧モデル記録を置き換える(再判定の結果を反映)
-    is_cur = lambda r: r.get("cost") == costs.MODEL  # noqa: E731
+    is_cur = lambda r: r.get("cost") == config.COST_MODEL  # noqa: E731
     fresh = [r for r in new if "key" in r and is_cur(r)
              and (r["key"] not in results or not is_cur(results[r["key"]]))]
     for r in fresh:
