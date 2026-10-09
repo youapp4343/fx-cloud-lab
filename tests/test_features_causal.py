@@ -45,6 +45,13 @@ def main() -> None:
         print(f"{pair} {tf}: 特徴量{len(n_full)} / 先読みNG {bad or 'なし'} / coverage除外 {dropped or 'なし'}")
         assert not bad, bad
 
+        # 時刻の単位が混ざっても同じ結果になること(クラウドのparquetはms/us、ローカルはns)
+        df_ms = df.copy()
+        df_ms["timestamp"] = df_ms["timestamp"].astype("datetime64[ms]")
+        macro_us = {n: v.assign(available_at=v["available_at"].astype("datetime64[us]")) for n, v in macro.items()}
+        n_mix, m_mix, _ = gen.build_features(df_ms, refs, pair, macro_us, tf)
+        assert n_mix == n_full and np.allclose(m_mix, m_full, equal_nan=True, rtol=1e-5, atol=1e-6), "単位混在で結果が変わった"
+
 
 if __name__ == "__main__":
     main()

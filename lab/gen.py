@@ -54,6 +54,11 @@ def set_replay(sig: np.ndarray) -> None:
     _REPLAY["sig"] = sig
 
 
+def _ns(s: pd.Series) -> pd.Series:
+    """時刻の単位をnsに揃える。parquetを書いたpandasの版でms/us/nsが混ざり、merge_asofが拒否するため。"""
+    return pd.to_datetime(s).astype("datetime64[ns]")
+
+
 def _streak(close: pd.Series) -> pd.Series:
     """連続陽線(+)/連続陰線(-)の本数。"""
     d = np.sign(close.diff().fillna(0.0))
@@ -131,7 +136,8 @@ def horizon_features(df: pd.DataFrame, a: pd.Series, bpd: int) -> Dict[str, pd.S
     asia = df[ts.dt.hour < 8].groupby(day[ts.dt.hour < 8]).agg(ah=("high", "max"), al=("low", "min"))
     asia["available_at"] = asia.index + pd.Timedelta(hours=8)
     asia = asia.reset_index(drop=True).sort_values("available_at")
-    m = pd.merge_asof(pd.DataFrame({"timestamp": ts.to_numpy()}), asia, left_on="timestamp",
+    asia["available_at"] = _ns(asia["available_at"])
+    m = pd.merge_asof(pd.DataFrame({"timestamp": _ns(ts).to_numpy()}), asia, left_on="timestamp",
                       right_on="available_at", direction="backward", tolerance=pd.Timedelta(days=4))
     rng = (m["ah"] - m["al"]).replace(0.0, np.nan)
     f["asia_pos"] = pd.Series(((c.to_numpy() - m["al"]) / rng).to_numpy(), index=df.index)
@@ -222,9 +228,10 @@ def load_macro() -> Dict[str, pd.DataFrame]:
 
 def _asof(ts: pd.Series, src: pd.DataFrame, col: str, max_age: pd.Timedelta) -> pd.Series:
     """各バー時刻について available_at <= 時刻 の最新値を引く(公表前の値は使わない)。"""
-    src = src.dropna(subset=[col]).sort_values("available_at")
-    left = pd.DataFrame({"timestamp": ts.to_numpy()})
-    m = pd.merge_asof(left, src[["available_at", col]], left_on="timestamp", right_on="available_at",
+    src = src.dropna(subset=[col]).sort_values("available_at")[["available_at", col]].copy()
+    src["available_at"] = _ns(src["available_at"])
+    left = pd.DataFrame({"timestamp": _ns(ts).to_numpy()})
+    m = pd.merge_asof(left, src, left_on="timestamp", right_on="available_at",
                       direction="backward", tolerance=max_age)
     return pd.Series(m[col].to_numpy(), index=ts.index)
 

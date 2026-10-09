@@ -30,13 +30,26 @@
 
 ## Progress
 
-- [ ] Phase A ← いまここ
-- [ ] Phase B
-- [ ] Phase C
-- [ ] Phase D
+- [x] Phase A: macro取得(COT 8市場・FRED 10系列)+ 公表ラグつき特徴量(検証済: tests/test_macro_lag.py 3検査OK)
+- [x] Phase B: GitHub質順スカウト(検証済: 134件取得、109件採点、scout/REPORT.md 出力)
+- [x] Phase C: 日単位モメンタム・ボラレジーム・アジアレンジ・暦・通貨強弱を追加(検証済: tests/test_features_causal.py 先読みNGなし)
+- [ ] Phase D: クラウド通し実行 run 37881266086 ← いまここ
 
 ## Learnings
 
+- GitHub検索APIは複数語をAND扱いし、長いクエリはほぼ0件になる。効いたのは2〜3語のクエリ
+- 検証語で採点すると上位はスター0〜3の新しいリポジトリばかり。READMEの語彙を見ているだけで、
+  中身の正しさは保証しない(LLM生成の「それらしいREADME」も上位に来うる)
+- 上位リポジトリの多くが「生存ゼロ」「全戦略が判定基準で不合格」と報告している。手元の結果と整合
+- CFTCのNZD先物は2022年に市場名が "NZ DOLLAR" に改称。startswithで別名も拾う必要がある
+- FREDのOECD月次3か月金利は公表が2〜3か月遅れ、EUR・GBPは2026-01で更新が止まっている。
+  鮮度上限(150日)を超えたら欠損扱いにして、止まった値を引き延ばさない
+- ローカルのOHLCは2012年開始でCOT(2014〜)のcoverageが足りず、macro特徴量はcoverageゲートで落ちる。
+  クラウドは2016年開始なので採用される(テストは2016年以降に絞って確認)
+- Bashのヒアドキュメントに長いPythonを書くとクォート解析で失敗することがある。パッチはファイルに書いて実行する
+
 ## Next actions
 
-- FX側の既存COT/金利スクリプトから取得元URLを確認
+- run 37881266086 の完了確認: dataジョブのmacro取得ログ、searchログの `macro: [...]`、
+  results.jsonl に cot_/rate_/ccy_/is_ を含むルールがあるか
+- 結果をユーザーに報告
