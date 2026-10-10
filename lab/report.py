@@ -53,6 +53,9 @@ def judge(r: Dict[str, Any]) -> List[str]:
     # 未計測(構造的SL/TPのテンプレート・旧記録)は判定対象外。表では「-」と出る
     if r.get("ho_placebo_p", 0.0) > config.PLACEBO_MAX_P:
         fails.append("プラセボ並み")
+    # 出口のみの実験: 買い・売りの両方が黒字でなければ、出口ではなく地合いの寄与
+    if r.get("kind") == "exit" and min(r.get("ho_sum_long", -1.0), r.get("ho_sum_short", -1.0)) <= 0:
+        fails.append("片側のみ黒字")
     return fails
 
 
@@ -63,7 +66,11 @@ def fmt_params(p: Dict[str, float]) -> str:
 def row_html(r: Dict[str, Any]) -> str:
     fails = r["fails"]
     placebo = f"{r['ho_placebo_p']:.2f}" if "ho_placebo_p" in r else "-"
+    if r.get("kind") == "exit" and "ho_sum_long" in r:
+        placebo = "対象外"
     old = f"<br>旧コスト(固定スプレッド)でのPF {r['old_ho_pf']:.2f}" if r.get("old_ho_pf") is not None else ""
+    sides = (f"<br>買い {r['ho_sum_long']:.0f}pips (PF {r['ho_pf_long']:.2f}) / 売り {r['ho_sum_short']:.0f}pips (PF {r['ho_pf_short']:.2f})"
+             if "ho_sum_long" in r else "")
     badge = '<span class="ok">生存</span>' if not fails else f'<span class="ng">{html.escape(" / ".join(fails))}</span>'
     return (
         "<tr>"
@@ -78,7 +85,7 @@ def row_html(r: Dict[str, Any]) -> str:
         f"<td>{r.get('ho_sum', 0):.0f}<br><small>除外後 {r.get('ho_sum_ex_top3', 0):.0f}</small></td>"
         f"<td>{r.get('ho_maxdd', 0):.0f}</td>"
         f"<td>{r['tr_pf']:.2f} / {r['cf_pf']:.2f}<br><small>n {r['tr_n']} / {r['cf_n']}</small></td>"
-        f"<td><small>{html.escape(r.get('desc') or fmt_params(r['params']))}{old}</small></td>"
+        f"<td><small>{html.escape(r.get('desc') or fmt_params(r['params']))}{sides}{old}</small></td>"
         "</tr>"
     )
 
@@ -129,6 +136,10 @@ def build_html(stats: Dict[str, Any], evaluated: List[Dict[str, Any]]) -> str:
 <li>通過条件: train n≥{config.TRAIN_MIN_N} かつ PF≥{config.TRAIN_MIN_PF} / confirm n≥{config.CONFIRM_MIN_N} かつ PF≥{config.CONFIRM_MIN_PF}</li>
 <li>生存条件(holdout): n≥{config.HOLDOUT_MIN_N}、片側t検定のBH-FDR q≤{config.FDR_Q}、平均pipsのbootstrap CI95下限&gt;0、上位3トレード除外後も合計pips&gt;0、プラセボp≤{config.PLACEBO_MAX_P}</li>
 <li>プラセボp: シグナルを日単位でずらした{config.PLACEBO_N}本の偽ルールと合計pipsを比較した順位。高いほど「相場の地合いに乗っただけ」</li>
+<li>トレーリングストップが足のATRの{config.MIN_TRAIL_ATR}倍より狭い設定は評価しない。バー単位の検証では
+「足の高値 − トレール幅」で決済できたことになり、ランダムなエントリーでもPF 2超が出る(1分足で再現すると1未満)</li>
+<li>戦略名 exit は出口だけの実験。エントリーはランダムで、同じ候補バーから買いだけ・売りだけを別々に回して合算する。
+買い・売りの両方が黒字でなければ不採用(片方だけなら相場の地合い)。プラセボは対象外</li>
 <li>戦略名 gen は特徴量条件を自動合成したルール(しきい値はtrain区間の分位点で固定)。それ以外は既存テンプレートのパラメータ摂動</li>
 <li>コスト: ThreeTraderの実測スプレッド(時間帯別の時間加重平均。ロールオーバーは夏UTC21時・冬UTC22時として反映)+手数料{config.COMMISSION_PIPS}pips+スリッページ{config.SLIPPAGE_PIPS}pips。
 実測が無い銘柄(USDCHF・USDCAD・NZDUSD・EURGBP)は実測銘柄の時間帯別の拡大幅を足して推定。スワップ・約定拒否は未反映</li>

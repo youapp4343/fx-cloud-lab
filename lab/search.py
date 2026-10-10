@@ -1,8 +1,9 @@
 """時間予算つきランダム探索(1シャード分)。
 
-試行は2系統を抽選する:
+試行は3系統を抽選する:
 - template: 既存テンプレート×パラメータ摂動
 - gen     : lab.gen によるルール自動生成(特徴量条件のAND結合)
+- exit    : エントリーはランダム、出口(損切り・利確・トレール・保有時間)だけを変える
 
 どちらも train → confirm → holdout の段階ゲートで評価してJSONLに追記する。
 holdoutを見るのは train・confirm を両方通過した試行だけ。
@@ -31,6 +32,7 @@ from scipy import stats
 
 import app.core  # noqa: F401 - テンプレート登録の副作用import
 from app.core import datafeed, engine, templates
+from app.core.indicators import atr as _atr
 from app.core.strategy_model import Strategy, StrategyFilters, StrategyParam
 from lab import config, costs, gen
 
@@ -123,6 +125,22 @@ def placebo_p(sig: np.ndarray, replay: Strategy, df: pd.DataFrame, cost: Dict[st
     return round((1 + ge) / (config.PLACEBO_N + 1), 4)
 
 
+_atr_cache: Dict[tuple, float] = {}
+
+
+def atr_pips_of(train: pd.DataFrame, pair: str, tf: str) -> float:
+    """train区間のATR(14)中央値(pips)。トレール幅が足の値幅に対して狭すぎないかの判定に使う。"""
+    key = (pair, tf, len(train))
+    if key not in _atr_cache:
+        a = _atr(train["high"], train["low"], train["close"], 14)
+        _atr_cache[key] = float(np.nanmedian(a.to_numpy()) / engine._pip_size(pair))
+    return _atr_cache[key]
+
+
+def trail_too_tight(trail_pips: float, train: pd.DataFrame, pair: str, tf: str) -> bool:
+    return 0 < trail_pips < config.MIN_TRAIL_ATR * atr_pips_of(train, pair, tf)
+
+
 def staged(rec: Dict[str, Any], bt: Callable[[int], np.ndarray],
            holdout_signal: Callable[[], Optional[np.ndarray]], replay: Strategy,
            parts: List[pd.DataFrame], cost: Dict[str, float], seed: int) -> Dict[str, Any]:
@@ -161,6 +179,10 @@ def eval_template(tpl: str, pair: str, tf: str, win: str, params: Dict[str, floa
     rec: Dict[str, Any] = {"key": trial_key(tpl, pair, tf, win, params), "kind": "template",
                            "tpl": tpl, "pair": pair, "tf": tf, "win": win, "params": params,
                            "cost": costs.MODEL}
+    if trail_too_tight(float(params.get("trailing_pips", 0.0)), parts[0], pair, tf):
+        # 足より狭いトレールはバー検証で過大評価される(config.MIN_TRAIL_ATR)。評価せずに落とす
+        rec.update(stage=0, tr_n=0, tr_pf=0.0, skipped="trail_too_tight")
+        return rec
     s = make_strategy(tpl, pair, tf, win, params)
     cost = dict(spread_pips=config.SPREAD_PIPS[pair], slippage_pips=config.SLIPPAGE_PIPS)
 
@@ -197,6 +219,69 @@ def eval_gen(rule: Dict[str, Any], pair: str, tf: str, win: str, parts: List[pd.
     return staged(rec, bt, lambda: block.signal(rule, 2), s, parts, cost, seed)
 
 
+NO_TP_PIPS = 1e6   # 利確なしの表現(到達しない距離)
+
+
+def sample_exit(atr_pips: float, rng: random.Random) -> Dict[str, Any]:
+    tp = rng.choice(config.EXIT_TP_ATR)
+    trail = rng.choice(config.EXIT_TRAIL_ATR)
+    return {
+        "sl_pips": round(max(1.0, rng.choice(config.EXIT_SL_ATR) * atr_pips), 1),
+        "tp_pips": round(max(1.0, tp * atr_pips), 1) if tp > 0 else 0.0,
+        "trail_pips": round(max(1.0, trail * atr_pips), 1) if trail > 0 else 0.0,
+        "hold": rng.choice(config.EXIT_HOLD_BARS),
+        "density": rng.choice(config.EXIT_DENSITY),
+        "mask_seed": rng.randrange(2**31),
+    }
+
+
+def describe_exit(spec: Dict[str, Any]) -> str:
+    tp = f"TP {spec['tp_pips']:g}" if spec["tp_pips"] > 0 else "TPなし"
+    trail = f" トレール {spec['trail_pips']:g}" if spec["trail_pips"] > 0 else ""
+    return f"出口のみ(ランダムエントリー 密度{spec['density']:g}、買い・売り両方); SL {spec['sl_pips']:g} {tp}{trail} hold {spec['hold']}"
+
+
+def eval_exit(spec: Dict[str, Any], pair: str, tf: str, win: str, parts: List[pd.DataFrame],
+              seed: int) -> Dict[str, Any]:
+    """出口ルールだけの評価。エントリーはランダムで、買いだけ・売りだけを別々に回して合算する。
+
+    買いと売りを同じ乱数のエントリー候補で回すので、相場の地合い(上げ相場なら買いが有利)は
+    両者で逆向きに効く。出口の形そのものに価値があれば、買いでも売りでも黒字になるはず。
+    プラセボは回さない(エントリーが最初からランダムなので、ずらしても同じ)。
+    """
+    rec: Dict[str, Any] = {"key": trial_key("exit", pair, tf, win, spec), "kind": "exit", "tpl": "exit",
+                           "pair": pair, "tf": tf, "win": win, "exit": spec, "desc": describe_exit(spec),
+                           "cost": costs.MODEL}
+    if trail_too_tight(spec["trail_pips"], parts[0], pair, tf):
+        rec.update(stage=0, tr_n=0, tr_pf=0.0, skipped="trail_too_tight")
+        return rec
+    params = {"sl_pips": spec["sl_pips"], "tp_pips": spec["tp_pips"] if spec["tp_pips"] > 0 else NO_TP_PIPS,
+              "lot": 0.1, "max_hold_bars": float(spec["hold"])}
+    if spec["trail_pips"] > 0:
+        params["trailing_pips"] = spec["trail_pips"]
+    s = make_strategy("lab_replay", pair, tf, win, params)
+    cost = dict(spread_pips=config.SPREAD_PIPS[pair], slippage_pips=config.SLIPPAGE_PIPS)
+    sides: Dict[int, Dict[int, np.ndarray]] = {}
+
+    def bt(i: int) -> np.ndarray:
+        mask = np.random.default_rng(spec["mask_seed"] + i).random(len(parts[i])) < spec["density"]
+        out = {}
+        for side in (1, -1):
+            gen.set_replay(mask.astype(np.int64) * side)
+            out[side] = pips_of(engine.run_backtest(s, parts[i], **cost), pair)
+        sides[i] = out
+        return np.concatenate([out[1], out[-1]])
+
+    rec = staged(rec, bt, lambda: None, s, parts, cost, seed)
+    if 2 in sides:
+        for side, name in ((1, "long"), (-1, "short")):
+            leg = sides[2][side]
+            rec[f"ho_n_{name}"] = len(leg)
+            rec[f"ho_sum_{name}"] = round(float(leg.sum()), 1)
+            rec[f"ho_pf_{name}"] = round(pf_of(leg), 3)
+    return rec
+
+
 def load_df(pair: str, tf: str) -> Optional[pd.DataFrame]:
     path = datafeed.OHLC_DIR / f"{pair}_{tf}.parquet"
     if not path.exists():
@@ -212,6 +297,7 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", type=Path, required=True)
     ap.add_argument("--max-trials", type=int, default=0, help="0=無制限(動作確認用)")
+    ap.add_argument("--exit-share", type=float, default=-1.0, help="出口のみ実験の割合。負ならconfigの値")
     args = ap.parse_args()
 
     rng = random.Random(args.seed * 1000 + args.shard)
@@ -220,6 +306,7 @@ def main() -> None:
     tfs, weights = list(config.TF_WEIGHTS), list(config.TF_WEIGHTS.values())
     broken: set = set()  # (tpl, tf) で例外が出た組は同一シャード内で再試行しない
     n_done = 0
+    exit_share = config.EXIT_SHARE if args.exit_share < 0 else args.exit_share
     macro = gen.load_macro()
     print(f"[shard {args.shard}] macro: {sorted(macro)}", flush=True)
 
@@ -242,16 +329,21 @@ def main() -> None:
                 if time.time() >= deadline or (args.max_trials and n_done >= args.max_trials):
                     break
                 win = rng.choice(list(config.WINDOWS))
-                tpl = "gen" if rng.random() < config.GEN_SHARE else rng.choice(tpl_names)
+                if rng.random() < exit_share:
+                    tpl = "exit"
+                else:
+                    tpl = "gen" if rng.random() < config.GEN_SHARE else rng.choice(tpl_names)
                 if (tpl, tf) in broken:
                     continue
                 try:
-                    if tpl == "gen":
+                    if tpl == "exit":
+                        rec = eval_exit(sample_exit(block.atr_pips, rng), pair, tf, win, parts, rng.randrange(2**31))
+                    elif tpl == "gen":
                         rec = run_gen_trial(pair, tf, win, parts, block, rng)
                     else:
                         rec = run_template_trial(tpl, pair, tf, win, parts, rng)
                 except Exception as exc:  # noqa: BLE001 - 1試行の失敗で探索を止めない
-                    if tpl != "gen":
+                    if tpl not in ("gen", "exit"):
                         broken.add((tpl, tf))
                     rec = {"tpl": tpl, "pair": pair, "tf": tf, "stage": -1,
                            "error": f"{type(exc).__name__}: {exc}"[:160]}

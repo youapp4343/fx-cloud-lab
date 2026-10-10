@@ -69,7 +69,9 @@ def main() -> None:
             for r in recs:
                 seed = rng.randrange(2**31)
                 try:
-                    if r["tpl"] == "gen":
+                    if r["tpl"] == "exit":
+                        new = search.eval_exit(r["exit"], pair, tf, r["win"], parts, seed)
+                    elif r["tpl"] == "gen":
                         block = gen.Block(df, (a, b), engine._pip_size(pair), refs_for(r["rule"], tf), pair, macro, tf)
                         missing = [c["f"] for c in r["rule"]["conds"] if c["f"] not in block.names]
                         if missing:

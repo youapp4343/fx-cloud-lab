@@ -6,6 +6,9 @@ on:
       minutes:
         description: "1シャードあたりの探索時間(分)"
         default: "20"
+      exit_share:
+        description: "出口のみ実験の割合(0〜1)。空ならconfigの値"
+        default: ""
       recheck:
         description: "過去のholdout到達分を現行コストで再判定する(true/false)"
         default: "false"
@@ -21,6 +24,7 @@ concurrency:
 
 env:
   MINUTES: ${{ github.event.inputs.minutes || '20' }}
+  EXIT_SHARE: ${{ github.event.inputs.exit_share || '-1' }}
 
 jobs:
   data:
@@ -77,7 +81,7 @@ jobs:
           path: data
       - run: >
           python -m lab.search --shard ${{ matrix.shard }} --minutes "$MINUTES"
-          --seed ${{ github.run_id }} --out out/shard_${{ matrix.shard }}.jsonl
+          --seed ${{ github.run_id }} --out out/shard_${{ matrix.shard }}.jsonl --exit-share "$EXIT_SHARE"
       - uses: actions/upload-artifact@v4
         with:
           name: results-${{ matrix.shard }}
