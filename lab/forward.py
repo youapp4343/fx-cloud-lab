@@ -26,6 +26,8 @@ from app.core import engine  # noqa: E402
 from lab import config, costs, gen, recheck, search  # noqa: E402
 
 WATCHLIST = Path(__file__).resolve().parent / "watchlist.json"
+# 凍結時点のスプレッド表。探索側の表(spread_profile.json)を作り直しても、前向き検証の判定条件は動かさない
+FROZEN_PROFILE = Path(__file__).resolve().parent / "watchlist_spread_profile.json"
 
 
 def forward_trades(item: Dict[str, Any], freeze_at: pd.Timestamp, macro: Dict[str, pd.DataFrame]) -> List[Dict[str, Any]]:
@@ -89,13 +91,14 @@ def main() -> None:
     wl = json.loads(WATCHLIST.read_text(encoding="utf-8"))
     freeze_at = pd.Timestamp(wl["freeze_at"])
     macro = gen.load_macro()
+    profile = json.loads(FROZEN_PROFILE.read_text(encoding="utf-8"))
     rows = []
     for item in wl["items"]:
         row = {"id": item["id"], "tpl": item["tpl"], "pair": item["pair"], "tf": item["tf"], "win": item["win"],
                "desc": item.get("desc", ""), "selection": item["selection"]}
         try:
             trades = forward_trades(item, freeze_at, macro)
-            row.update(judge(costs.adjust(trades, item["pair"]), wl["rule"]))
+            row.update(judge(costs.adjust(trades, item["pair"], profile), wl["rule"]))
             row["last_trade"] = str(trades[-1]["exit_time"])[:16] if trades else None
         except Exception as exc:  # noqa: BLE001 - 1候補の失敗で他を止めない
             row.update({"n": 0, "sum": 0.0, "verdict": "評価不能", "error": f"{type(exc).__name__}: {exc}"[:160]})

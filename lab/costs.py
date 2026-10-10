@@ -17,7 +17,7 @@ from __future__ import annotations
 import json
 from datetime import datetime, timedelta
 from pathlib import Path
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 import numpy as np
 
@@ -51,8 +51,15 @@ def us_summer_hour(ts: datetime) -> int:
     return ts.hour if is_us_dst(ts) else (ts.hour - 1) % 24
 
 
-def hourly_cost(pair: str) -> np.ndarray:
-    """時間帯(米国夏時間のUTC時 0-23)ごとの往復コスト(pips)。表に無い銘柄は固定スプレッドのまま。"""
+def hourly_cost(pair: str, profile: Optional[Dict[str, Any]] = None) -> np.ndarray:
+    """時間帯(米国夏時間のUTC時 0-23)ごとの往復コスト(pips)。表に無い銘柄は固定スプレッドのまま。
+
+    profile を渡すとその表で計算する(前向き検証は凍結時点の表を使い続けるため)。
+    """
+    if profile is not None:
+        if pair in profile:
+            return np.array(profile[pair]["mean"], dtype=np.float64) + COMMISSION_PIPS
+        return np.full(24, config.SPREAD_PIPS[pair], dtype=np.float64)
     if pair not in _cache:
         if pair in _profile:
             _cache[pair] = np.array(_profile[pair]["mean"], dtype=np.float64) + COMMISSION_PIPS
@@ -61,11 +68,11 @@ def hourly_cost(pair: str) -> np.ndarray:
     return _cache[pair]
 
 
-def adjust(trades: List[Dict[str, Any]], pair: str) -> np.ndarray:
+def adjust(trades: List[Dict[str, Any]], pair: str, profile: Optional[Dict[str, Any]] = None) -> np.ndarray:
     """エンジンのトレード一覧から、時間帯別コスト反映後のpips配列を返す。"""
     if not trades:
         return np.array([], dtype=np.float64)
-    cost, base = hourly_cost(pair), config.SPREAD_PIPS[pair]
+    cost, base = hourly_cost(pair, profile), config.SPREAD_PIPS[pair]
     pips = np.array([float(t["pips"]) for t in trades], dtype=np.float64)
     hours = np.array([us_summer_hour(t["entry_time"] if t["side"] == "long" else t["exit_time"]) for t in trades])
     return pips - (cost[hours] - base)
