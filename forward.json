@@ -1,0 +1,135 @@
+{
+ "updated": "2026-10-10 23:03",
+ "freeze_at": "2026-10-11 00:00",
+ "frozen_on": "2026-10-11",
+ "pool": 11,
+ "rule": {
+  "checkpoints": [
+   30,
+   60,
+   100
+  ],
+  "alpha_per_test": 0.00667,
+  "pass": "いずれかのチェックポイントで、先頭N件の片側t検定 p <= 0.00667 かつ合計pips>0",
+  "fail": "100件に達しても合格しなければ不合格",
+  "family_alpha": 0.1,
+  "note": "Bonferroni(候補数×チェックポイント数)。判定は固定件数の先頭N件のみで行う"
+ },
+ "rows": [
+  {
+   "id": "W01",
+   "tpl": "gmma_stack",
+   "pair": "XAUUSD",
+   "tf": "H1",
+   "win": "ny13_21",
+   "desc": "",
+   "selection": {
+    "ho_n": 398,
+    "ho_pf": 1.332,
+    "ho_p": 0.0026289926497124363,
+    "ho_ci_lo": 18.318,
+    "ho_placebo_p": 0.0199,
+    "ho_from": "2024-08-14",
+    "ho_to": "2026-10-09"
+   },
+   "n": 0,
+   "sum": 0.0,
+   "checks": [],
+   "verdict": "継続",
+   "next_checkpoint": 30,
+   "last_trade": null
+  },
+  {
+   "id": "W02",
+   "tpl": "tv3_276_st_ensemble",
+   "pair": "USDJPY",
+   "tf": "H1",
+   "win": "asia0_8",
+   "desc": "",
+   "selection": {
+    "ho_n": 125,
+    "ho_pf": 1.72,
+    "ho_p": 0.003868000818958135,
+    "ho_ci_lo": 3.834,
+    "ho_placebo_p": 0.005,
+    "ho_from": "2024-08-13",
+    "ho_to": "2026-10-09"
+   },
+   "n": 0,
+   "sum": 0.0,
+   "checks": [],
+   "verdict": "継続",
+   "next_checkpoint": 30,
+   "last_trade": null
+  },
+  {
+   "id": "W03",
+   "tpl": "cat2_rsi_reentry_114",
+   "pair": "XAUUSD",
+   "tf": "H1",
+   "win": "asia0_8",
+   "desc": "",
+   "selection": {
+    "ho_n": 76,
+    "ho_pf": 2.064,
+    "ho_p": 0.007346375971774146,
+    "ho_ci_lo": 30.624,
+    "ho_placebo_p": 0.0448,
+    "ho_from": "2024-08-14",
+    "ho_to": "2026-10-09"
+   },
+   "n": 0,
+   "sum": 0.0,
+   "checks": [],
+   "verdict": "継続",
+   "next_checkpoint": 30,
+   "last_trade": null
+  },
+  {
+   "id": "W04",
+   "tpl": "gen",
+   "pair": "XAUUSD",
+   "tf": "H4",
+   "win": "all",
+   "desc": "LONG if don_pos_120>0.92487(q90); SL 125.1 TP 187.6 hold 32",
+   "selection": {
+    "ho_n": 107,
+    "ho_pf": 1.602,
+    "ho_p": 0.009141312582477317,
+    "ho_ci_lo": 7.166,
+    "ho_placebo_p": 0.005,
+    "ho_from": "2024-08-14",
+    "ho_to": "2026-10-09"
+   },
+   "n": 0,
+   "sum": 0.0,
+   "checks": [],
+   "verdict": "継続",
+   "next_checkpoint": 30,
+   "last_trade": null
+  },
+  {
+   "id": "W05",
+   "tpl": "tv3s_270_fractal_grid",
+   "pair": "EURJPY",
+   "tf": "H1",
+   "win": "all",
+   "desc": "",
+   "selection": {
+    "ho_n": 42,
+    "ho_pf": 2.348,
+    "ho_p": 0.013438950894997217,
+    "ho_ci_lo": 2.849,
+    "ho_placebo_p": 0.005,
+    "ho_from": "2024-08-13",
+    "ho_to": "2026-10-09"
+   },
+   "n": 0,
+   "sum": 0.0,
+   "checks": [],
+   "verdict": "継続",
+   "next_checkpoint": 30,
+   "last_trade": null
+  }
+ ]
+}
