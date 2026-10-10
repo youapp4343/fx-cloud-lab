@@ -88,7 +88,11 @@ jobs:
     needs: data
     if: ${{ github.event.inputs.recheck == 'true' }}
     runs-on: ubuntu-latest
-    timeout-minutes: 120
+    timeout-minutes: 340
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [0, 1, 2, 3, 4, 5]
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -101,10 +105,10 @@ jobs:
           name: ohlc
           path: data
       - run: curl -sfL "https://raw.githubusercontent.com/${{ github.repository }}/gh-pages/results.jsonl" -o prev_results.jsonl
-      - run: python -m lab.recheck --results prev_results.jsonl --out out/recheck.jsonl
+      - run: python -m lab.recheck --results prev_results.jsonl --out out/recheck_${{ matrix.shard }}.jsonl --shard ${{ matrix.shard }} --of 6
       - uses: actions/upload-artifact@v4
         with:
-          name: results-recheck
+          name: results-recheck-${{ matrix.shard }}
           path: out
           retention-days: 7
 

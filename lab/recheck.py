@@ -42,18 +42,20 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--results", type=Path, required=True)
     ap.add_argument("--out", type=Path, required=True)
+    ap.add_argument("--shard", type=int, default=0)
+    ap.add_argument("--of", type=int, default=1, help="並列数。対象をkeyで振り分ける")
     args = ap.parse_args()
 
     todo: Dict[tuple, List[Dict[str, Any]]] = defaultdict(list)
     with open(args.results, encoding="utf-8") as f:
         for line in f:
             r = json.loads(line)
-            if r.get("stage", 0) >= 2 and r.get("cost") != costs.MODEL:
+            if r.get("stage", 0) >= 2 and r.get("cost") != costs.MODEL and int(r["key"], 16) % args.of == args.shard:
                 todo[(r["pair"], r["tf"])].append(r)
     print(f"recheck対象: {sum(len(v) for v in todo.values())}件 / {len(todo)}ブロック", flush=True)
 
     macro = gen.load_macro()
-    rng = random.Random(0)
+    rng = random.Random(args.shard)
     args.out.parent.mkdir(parents=True, exist_ok=True)
     done = 0
     with open(args.out, "a", encoding="utf-8") as fout:
