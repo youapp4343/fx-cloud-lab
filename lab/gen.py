@@ -35,11 +35,14 @@ MIN_COVERAGE = 0.85
 _REPLAY: Dict[str, np.ndarray] = {}
 
 
-def _signal_replay(strategy: Strategy, df: pd.DataFrame) -> pd.Series:
+def _signal_replay(strategy: Strategy, df: pd.DataFrame):
     sig = _REPLAY["sig"]
     if len(sig) != len(df):
         raise ValueError(f"replay長不一致: sig={len(sig)} df={len(df)}")
-    return pd.Series(sig, index=df.index, dtype=int)
+    if _REPLAY.get("sl") is None:
+        return pd.Series(sig, index=df.index, dtype=int)
+    # 構造的SL/TPつき(プラセボ用): エンジンが価格列を読めるようDataFrameで返す
+    return pd.DataFrame({"signal": sig, "sl_price": _REPLAY["sl"], "tp_price": _REPLAY["tp"]}, index=df.index)
 
 
 templates.register(
@@ -50,8 +53,8 @@ templates.register(
 )
 
 
-def set_replay(sig: np.ndarray) -> None:
-    _REPLAY["sig"] = sig
+def set_replay(sig: np.ndarray, sl: Optional[np.ndarray] = None, tp: Optional[np.ndarray] = None) -> None:
+    _REPLAY["sig"], _REPLAY["sl"], _REPLAY["tp"] = sig, sl, tp
 
 
 def _ns(s: pd.Series) -> pd.Series:

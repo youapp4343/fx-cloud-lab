@@ -101,13 +101,19 @@ def make_strategy(tpl: str, pair: str, tf: str, win: str, params: Dict[str, floa
     )
 
 
-def placebo_p(sig: np.ndarray, replay: Strategy, df: pd.DataFrame, cost: Dict[str, float],
+def placebo_p(sig: Any, replay: Strategy, df: pd.DataFrame, cost: Dict[str, float],
               actual_sum: float, tf: str, seed: int) -> Optional[float]:
     """シグナルを日単位で巡回シフトしたプラセボ群に対する順位p値。
 
     時刻帯・売買方向・回数・決済ルールは保ったまま、条件と値動きの対応だけを壊す。
     実ルールの合計pipsがプラセボと大差なければ、優位性ではなく地合い(ドリフト)の寄与。
     """
+    # sig は方向の配列、または (方向, SLまでの距離, TPまでの距離) の組。
+    # 価格で指定されたSL/TPは、ずらした先の終値に同じ距離を当て直す(価格そのものを運ぶと無意味になる)
+    sl_dist = tp_dist = None
+    if isinstance(sig, tuple):
+        sig, sl_dist, tp_dist = sig
+    close = df["close"].to_numpy(dtype=np.float64)
     bpd = gen.BARS_PER_DAY[tf]
     n_days = len(sig) // bpd
     if n_days < 30:
@@ -117,7 +123,11 @@ def placebo_p(sig: np.ndarray, replay: Strategy, df: pd.DataFrame, cost: Dict[st
     fail_at = int(config.PLACEBO_MAX_P * (config.PLACEBO_N + 1))
     ge = 0
     for k in range(config.PLACEBO_N):
-        gen.set_replay(np.roll(sig, int(rng.integers(5, n_days - 5)) * bpd))
+        shift = int(rng.integers(5, n_days - 5)) * bpd
+        if sl_dist is None:
+            gen.set_replay(np.roll(sig, shift))
+        else:
+            gen.set_replay(np.roll(sig, shift), close - np.roll(sl_dist, shift), close + np.roll(tp_dist, shift))
         if pips_of(engine.run_backtest(replay, df, **cost), replay.symbol).sum() >= actual_sum:
             ge += 1
             if ge >= fail_at:
@@ -188,8 +198,15 @@ def eval_template(tpl: str, pair: str, tf: str, win: str, params: Dict[str, floa
 
     def holdout_signal() -> Optional[np.ndarray]:
         sig = templates.get(tpl).signal_fn(s, parts[2])
-        # 構造的SL/TP(価格列つきDataFrame)はシフトすると価格が無意味になるため対象外
-        return sig.fillna(0).to_numpy(dtype=np.int64) if isinstance(sig, pd.Series) else None
+        if isinstance(sig, pd.Series):
+            return sig.fillna(0).to_numpy(dtype=np.int64)
+        direction = sig["signal"].fillna(0).to_numpy(dtype=np.int64)
+        if "sl_price" not in sig.columns or "tp_price" not in sig.columns:
+            return direction
+        # 構造的SL/TP: 終値からの距離に直して運ぶ(NaNはそのまま=エンジンがpips指定にフォールバック)
+        close = parts[2]["close"].to_numpy(dtype=np.float64)
+        return (direction, close - sig["sl_price"].to_numpy(dtype=np.float64),
+                sig["tp_price"].to_numpy(dtype=np.float64) - close)
 
     return staged(rec, lambda i: pips_of(engine.run_backtest(s, parts[i], **cost), pair),
                   holdout_signal, make_strategy("lab_replay", pair, tf, win, params),

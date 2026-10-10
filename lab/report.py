@@ -50,7 +50,7 @@ def judge(r: Dict[str, Any]) -> List[str]:
         fails.append("CI下限≤0")
     if r.get("ho_sum_ex_top3", -1.0) <= 0:
         fails.append("上位3除外で負")
-    # 未計測(構造的SL/TPのテンプレート・旧記録)は判定対象外。表では「-」と出る
+    # 未計測(holdoutが赤字・件数不足で回していないもの)は他の条件で既に不採用。表では「-」と出る
     if r.get("ho_placebo_p", 0.0) > config.PLACEBO_MAX_P:
         fails.append("プラセボ並み")
     # 出口のみの実験: 買い・売りの両方が黒字でなければ、出口ではなく地合いの寄与

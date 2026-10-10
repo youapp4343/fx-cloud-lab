@@ -22,6 +22,7 @@ from app.core.indicators import atr, donchian_channel, rsi, sma
 from app.core.strategy_model import Strategy
 
 EXIT_SPEC_VERSION = "1"  # docs/exit_rules_spec.md 参照
+TRAIL_MIN_ATR_MULT = 2.5  # これ未満のトレール幅はバー検証で過大評価される(run_backtest内の警告を参照)
 
 BASE_DIR = Path(__file__).resolve().parent.parent.parent
 OHLC_DIR = BASE_DIR / "data" / "ohlc"  # mtf_confirmフィルタが上位足parquetを読むための基準ディレクトリ
@@ -191,6 +192,21 @@ def run_backtest(
             "initial_balance": initial_balance,
             "warnings": warnings,
         }
+
+    # トレール幅が足の値幅より狭いと、このエンジンは成績を過大評価する。保有中のSLは
+    # 「足の高値 − トレール幅」に追随させ、次の足でそこを割れば決済とするが、実際には
+    # 足の中で高値に届く前の押しで先に刈られる。2026-10-10 の実測(USDJPY 2025年前半・
+    # ランダムエントリー): トレール6pipsは H1足で PF 2.75、同じ売買を1分足で再現すると 0.82。
+    # 40pips(H1のATRの約2.5倍)は 0.96 と 0.97 で一致した。挙動は変えず、警告だけ出す。
+    if trailing_pips is not None and trailing_pips > 0 and len(df) > 30:
+        bar_atr = atr(df["high"], df["low"], df["close"], 14)
+        atr_pips = float(np.nanmedian(bar_atr.to_numpy())) / pip_size
+        if np.isfinite(atr_pips) and trailing_pips < TRAIL_MIN_ATR_MULT * atr_pips:
+            warnings.append(
+                f"trailing_pips={trailing_pips:g} は足のATR中央値({atr_pips:.1f}pips)の"
+                f"{TRAIL_MIN_ATR_MULT:g}倍未満です。バー単位の検証ではトレール決済を過大評価します"
+                "(より細かい足か実ティックで再検証してください)"
+            )
 
     # volume列に依存するテンプレート(volume_spike/orderflow_divergence)は、volumeが
     # 全て0/欠損の場合いずれも「無言でトレード0件」または「静かなフォールバック」に
