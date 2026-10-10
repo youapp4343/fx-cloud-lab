@@ -107,7 +107,38 @@ HEAD = ("<tr><th>戦略</th><th>判定</th><th>n</th><th>PF</th><th>平均pips [
         "<th>q値</th><th>プラセボp</th><th>合計pips</th><th>最大DD</th><th>PF train / confirm</th><th>パラメータ</th></tr>")
 
 
-def build_html(stats: Dict[str, Any], evaluated: List[Dict[str, Any]]) -> str:
+def forward_html(fw: Dict[str, Any]) -> str:
+    """凍結候補の前向き検証(lab/forward.py の出力)。"""
+    if not fw:
+        return ""
+    rule = fw["rule"]
+    rows = ""
+    for r in fw["rows"]:
+        sel = r["selection"]
+        cls = {"合格": "ok", "不合格": "ng", "評価不能": "ng"}.get(r["verdict"], "")
+        checks = " / ".join(f"{c['n']}件: p={c['p']:.4f}" for c in r.get("checks", [])) or "-"
+        nxt = f"{r['next_checkpoint']}件" if r.get("next_checkpoint") else "-"
+        pf = f"{r['pf']:.2f}" if r.get("pf") is not None else "-"
+        rows += (
+            "<tr>"
+            f"<td><b>{r['id']} {html.escape(r['tpl'])}</b><br><small>{r['pair']} {r['tf']} {r['win']}</small></td>"
+            f"<td><span class=\"{cls}\">{r['verdict']}</span></td>"
+            f"<td>{r['n']}</td><td>{pf}</td><td>{r['sum']:.0f}</td><td>{nxt}</td><td>{checks}</td>"
+            f"<td>{sel['ho_n']}件 PF {sel['ho_pf']:.2f}</td>"
+            f"<td><small>{html.escape(r.get('desc') or r.get('error', ''))}</small></td>"
+            "</tr>"
+        )
+    head = ("<tr><th>候補</th><th>判定</th><th>前向きn</th><th>PF</th><th>合計pips</th><th>次の判定</th>"
+            "<th>検定の履歴</th><th>凍結時のholdout</th><th>内容</th></tr>")
+    return f"""<h2>前向き検証(凍結した候補)</h2>
+<p>{html.escape(fw['frozen_on'])} に、探索上位 {fw['pool']} 件から機械的な基準で {len(fw['rows'])} 件を選んで中身を固定した。
+{html.escape(fw['freeze_at'])} UTC 以降に建てたトレードだけで判定する。更新 {html.escape(fw['updated'])} UTC</p>
+<div class="scroll"><table>{head}{rows}</table></div>
+<ul><li>合格: {html.escape(rule['pass'])}</li><li>不合格: {html.escape(rule['fail'])}</li>
+<li>{html.escape(rule['note'])}。全体の誤検出率 {rule['family_alpha']}</li></ul>"""
+
+
+def build_html(stats: Dict[str, Any], evaluated: List[Dict[str, Any]], fw: Dict[str, Any]) -> str:
     survivors = [r for r in evaluated if not r["fails"]]
     others = [r for r in evaluated if r["fails"]][:50]
     kpis = [
@@ -129,6 +160,7 @@ def build_html(stats: Dict[str, Any], evaluated: List[Dict[str, Any]]) -> str:
 <meta name="viewport" content="width=device-width,initial-scale=1"><title>FX Cloud Lab</title><style>{CSS}</style></head><body>
 <h1>FX Cloud Lab</h1><p>最終更新 {html.escape(stats['updated'])} UTC</p>
 <div class="kpis">{kpi_html}</div>
+{forward_html(fw)}
 <h2>生存候補</h2>{table(survivors)}
 <h2>holdout到達・不採用(q値順 上位50)</h2>{table(others)}
 <h2>判定基準</h2><ul>
@@ -198,7 +230,13 @@ def main() -> None:
         for r in results.values():
             f.write(json.dumps(r) + "\n")
     stats_path.write_text(json.dumps(stats, indent=1), encoding="utf-8")
-    (args.site / "index.html").write_text(build_html(stats, evaluated), encoding="utf-8")
+    # 前向き検証: 今回の実行で出ていれば差し替え、無ければ前回のものを表示し続ける
+    fw_path = args.site / "forward.json"
+    fresh_fw = sorted(args.in_dir.rglob("forward.json"))
+    if fresh_fw:
+        fw_path.write_text(fresh_fw[-1].read_text(encoding="utf-8"), encoding="utf-8")
+    fw = json.loads(fw_path.read_text(encoding="utf-8")) if fw_path.exists() else {}
+    (args.site / "index.html").write_text(build_html(stats, evaluated, fw), encoding="utf-8")
     (args.site / ".nojekyll").write_text("", encoding="utf-8")
     print(f"trials={stats['trials']} passed_train={stats['passed_train']} "
           f"holdout={len(evaluated)} survivors={sum(1 for r in evaluated if not r['fails'])}")

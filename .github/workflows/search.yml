@@ -116,8 +116,32 @@ jobs:
           path: out
           retention-days: 7
 
+  forward:
+    needs: data
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+      - run: pip install -r requirements.txt
+      - uses: actions/download-artifact@v4
+        with:
+          name: ohlc
+          path: data
+      # 凍結した候補(lab/watchlist.json)を、凍結後のデータだけで評価する
+      - run: python -m lab.forward --out out/forward.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: results-forward
+          path: out
+          retention-days: 7
+          if-no-files-found: ignore
+
   report:
-    needs: [search, recheck]
+    needs: [search, recheck, forward]
     if: ${{ !cancelled() }}
     runs-on: ubuntu-latest
     steps:

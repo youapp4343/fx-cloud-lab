@@ -20,6 +20,8 @@ FX戦略のランダム探索を GitHub Actions 上で回し、結果を GitHub 
 - `lab/gh_scout.py` — GitHubのFX戦略リポジトリを「検証の質」で採点(結果は `scout/REPORT.md`)
 - `lab/costs.py` — 時間帯別の実測コストをトレード損益に反映
 - `lab/recheck.py` — 過去の holdout 到達分を現行コストで再判定
+- `lab/watchlist.json` — 前向き検証にかける凍結済み候補と判定規則(事前登録。書き換えない)
+- `lab/forward.py` — 凍結候補を凍結後のデータだけで評価(毎日の実行で更新)
 - `lab/search.py` — 時間予算つきランダム探索(train → confirm → holdout の段階ゲート)
 - `lab/report.py` — 累積統合、BH-FDR、HTML生成
 

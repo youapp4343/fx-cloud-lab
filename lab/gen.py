@@ -324,7 +324,14 @@ class Block:
 
     def signal(self, rule: Dict[str, Any], part: int) -> Optional[np.ndarray]:
         """条件成立の立ち上がりバーだけに side を立てる。しきい値がNaNならNone。"""
-        m = self.mat[self.slices[part]]
+        return self._signal(rule, self.slices[part])
+
+    def signal_all(self, rule: Dict[str, Any]) -> Optional[np.ndarray]:
+        """全期間を通しで評価する(前向き検証用。区間の継ぎ目で立ち上がり判定を切らない)。"""
+        return self._signal(rule, slice(None))
+
+    def _signal(self, rule: Dict[str, Any], sl: slice) -> Optional[np.ndarray]:
+        m = self.mat[sl]
         mask = np.ones(len(m), dtype=bool)
         for cnd in rule["conds"]:
             if not np.isfinite(cnd["thr"]):
