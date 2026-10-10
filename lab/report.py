@@ -130,7 +130,7 @@ def build_html(stats: Dict[str, Any], evaluated: List[Dict[str, Any]]) -> str:
 <li>生存条件(holdout): n≥{config.HOLDOUT_MIN_N}、片側t検定のBH-FDR q≤{config.FDR_Q}、平均pipsのbootstrap CI95下限&gt;0、上位3トレード除外後も合計pips&gt;0、プラセボp≤{config.PLACEBO_MAX_P}</li>
 <li>プラセボp: シグナルを日単位でずらした{config.PLACEBO_N}本の偽ルールと合計pipsを比較した順位。高いほど「相場の地合いに乗っただけ」</li>
 <li>戦略名 gen は特徴量条件を自動合成したルール(しきい値はtrain区間の分位点で固定)。それ以外は既存テンプレートのパラメータ摂動</li>
-<li>コスト: ThreeTraderの実測スプレッド(UTC時間帯別の平均)+手数料{config.COMMISSION_PIPS}pips+スリッページ{config.SLIPPAGE_PIPS}pips。
+<li>コスト: ThreeTraderの実測スプレッド(時間帯別の時間加重平均。ロールオーバーは夏UTC21時・冬UTC22時として反映)+手数料{config.COMMISSION_PIPS}pips+スリッページ{config.SLIPPAGE_PIPS}pips。
 実測が無い銘柄(USDCHF・USDCAD・NZDUSD・EURGBP)は実測銘柄の時間帯別の拡大幅を足して推定。スワップ・約定拒否は未反映</li>
 <li>売りポジションのSLがスプレッド拡大だけで刈られる効果は未反映(ロールオーバーをまたぐ売りは実際より良く見える)</li>
 <li>表示値はすべてholdoutの値。ここの「生存」は実運用可を意味しない。次段はブローカー実ティックでの再検証とデモ運用</li>

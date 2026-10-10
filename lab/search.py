@@ -111,11 +111,15 @@ def placebo_p(sig: np.ndarray, replay: Strategy, df: pd.DataFrame, cost: Dict[st
     if n_days < 30:
         return None
     rng = np.random.default_rng(seed)
+    # これ以上プラセボが上回ったら、残りを全部回しても p <= PLACEBO_MAX_P にはならない
+    fail_at = int(config.PLACEBO_MAX_P * (config.PLACEBO_N + 1))
     ge = 0
-    for _ in range(config.PLACEBO_N):
+    for k in range(config.PLACEBO_N):
         gen.set_replay(np.roll(sig, int(rng.integers(5, n_days - 5)) * bpd))
         if pips_of(engine.run_backtest(replay, df, **cost), replay.symbol).sum() >= actual_sum:
             ge += 1
+            if ge >= fail_at:
+                return round((1 + ge) / (k + 2), 4)   # 不合格確定。ここまでの本数での推定値
     return round((1 + ge) / (config.PLACEBO_N + 1), 4)
 
 
