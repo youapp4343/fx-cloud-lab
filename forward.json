@@ -1,5 +1,5 @@
 {
- "updated": "2026-10-13 22:50",
+ "updated": "2026-10-14 21:46",
  "freeze_at": "2026-10-11 00:00",
  "frozen_on": "2026-10-11",
  "pool": 11,
@@ -55,12 +55,14 @@
     "ho_from": "2024-08-13",
     "ho_to": "2026-10-09"
    },
-   "n": 0,
-   "sum": 0.0,
+   "n": 1,
+   "sum": 34.3,
    "checks": [],
+   "pf": null,
+   "mean": 34.26,
    "verdict": "継続",
    "next_checkpoint": 30,
-   "last_trade": null
+   "last_trade": "2026-10-13 08:00"
   },
   {
    "id": "W03",
