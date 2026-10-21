@@ -1,8 +1,8 @@
 {
- "trials": 37325,
- "errors": 198,
- "passed_train": 1152,
- "passed_confirm": 500,
+ "trials": 41792,
+ "errors": 225,
+ "passed_train": 1267,
+ "passed_confirm": 528,
  "runs": [
   {
    "at": "2026-10-10 15:16",
@@ -68,6 +68,11 @@
    "at": "2026-10-20 22:03",
    "trials": 2830,
    "holdout": 18
+  },
+  {
+   "at": "2026-10-21 22:08",
+   "trials": 4494,
+   "holdout": 28
   }
  ],
  "cost_model": "tt_hourly_v3",
@@ -101,5 +106,5 @@
    "updated": "2026-10-10 09:48"
   }
  ],
- "updated": "2026-10-20 22:03"
+ "updated": "2026-10-21 22:08"
 }
